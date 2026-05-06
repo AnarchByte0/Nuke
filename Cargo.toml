@@ -6,6 +6,12 @@ authors = ["AnarchByte"]
 description = "Nuke"
 repository = "https://github.com/AnarchByte/Nuke"
 
+[package.metadata.wix]
+upgrade-guid = "BB03A8CB-D147-4A0C-9193-D397DBF24DFD"
+path-guid = "2F36CCD6-F711-4D98-90A9-B1D41FC73B01"
+license = false
+eula = false
+
 [[bin]]
 name = "Nuke"
 path = "src/main.rs"
