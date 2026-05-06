@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 authors = ["AnarchByte"]
 description = "Nuke"
+repository = "https://github.com/AnarchByte/Nuke"
 
 [[bin]]
 name = "Nuke"
@@ -21,15 +22,7 @@ once_cell = "1.19"
 [build-dependencies]
 winres = "0.1"
 
-[package.metadata.dist]
-# Config for cargo-dist
-dist = true
-formula = "Nuke"
-project-name = "Nuke"
-# This helps in naming the archives/installers
-archive-name = "Nuke-{{version}}-{{target}}"
-targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-apple-darwin"]
-installers = ["msi", "powershell", "shell"]
-archive-format = "tar.gz"
-# To allow uncompressed binaries for Windows (direct .exe files in releases)
-allow-uncompressed-binaries = true
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
