@@ -35,13 +35,14 @@ publisher = "AnarchByte"
 copyright = "Copyright (c) 2026 AnarchByte"
 description = "Nuke Desktop Application"
 homepage = "https://github.com/AnarchByte/Nuke"
-# Packager expects an array of formats at the top level or per-platform
-formats = ["nsis", "wix", "deb", "dmg"]
+icons = ["app-icon.ico"]
 out_dir = "target/release/bundle"
 
-
 [package.metadata.packager.windows]
-# Removed nested formats to avoid deserialization error
-# Packager will use the top-level formats filtered by platform availability
-# You can also add icons here if needed
-# icons = ["app-icon.ico"]
+formats = ["nsis", "wix"]
+
+[package.metadata.packager.linux]
+formats = ["deb"]
+
+[package.metadata.packager.macos]
+formats = ["dmg"]
