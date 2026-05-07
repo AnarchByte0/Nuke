@@ -8,7 +8,7 @@
   <Identity
     Name="AnarchByte.Nuke"
     Publisher="CN=AnarchByte"
-    Version="0.5.10.0"
+    Version="0.5.11.0"
     ProcessorArchitecture="ARCH_PLACEHOLDER" />
 
   <Properties>

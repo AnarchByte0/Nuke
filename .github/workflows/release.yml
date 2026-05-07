@@ -67,10 +67,14 @@ jobs:
           fi
 
       - name: Install cargo-dist
-        shell: bash
         run: |
-          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.31.0/cargo-dist-installer.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            powershell -ExecutionPolicy Bypass -c "irm https://github.com/axodotdev/cargo-dist/releases/download/v0.31.0/cargo-dist-installer.ps1 | iex"
+            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          else
+            curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.31.0/cargo-dist-installer.sh | sh
+            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          fi
 
       - name: Build & Package
         shell: bash
@@ -93,13 +97,19 @@ jobs:
         if: runner.os == 'Windows' && env.PFX_BASE64 != ''
         shell: pwsh
         run: |
-          $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
-          Get-ChildItem -Path target/distrib/ -Include *.exe, *.msi -Recurse | ForEach-Object {
-            & $signtool sign /fd SHA256 /a /f Nuke.pfx /p "${{ secrets.PFX_PASSWORD }}" $_.FullName
+          $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\" -Filter "signtool.exe" -Recurse | Sort-Object -Property LastWriteTime -Descending | Select-Object -First 1
+          if ($signtool) {
+            Write-Host "Using SignTool at: $($signtool.FullName)"
+            Get-ChildItem -Path target/dist/ -Include *.exe, *.msi -Recurse | ForEach-Object {
+              & $signtool.FullName sign /fd SHA256 /a /f Nuke.pfx /p "${{ secrets.PFX_PASSWORD }}" $_.FullName
+            }
+          } else {
+            Write-Error "SignTool.exe not found!"
+            exit 1
           }
 
       - name: Upload & Release
         uses: softprops/action-gh-release@v2
         with:
-          files: target/distrib/**/*
+          files: target/dist/**/*
           token: ${{ secrets.GITHUB_TOKEN }}
