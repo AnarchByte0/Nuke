@@ -69,7 +69,7 @@ jobs:
           fi
 
       - name: Install cargo-dist
-        uses: axodotdev/setup-cargo-dist@v1
+        uses: axodotdev/setup-dist@v0
         with:
           version: v0.43.0
 
