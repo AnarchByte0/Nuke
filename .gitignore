@@ -3,3 +3,13 @@
 /ui/.nuxt
 /ui/.output
 .DS_Store
+
+# MSIX & Packaging
+/msix_build
+/*.msix
+/*.pfx
+/Nuke-*-Setup.exe
+
+# OS specific
+Thumbs.db
+desktop.ini
