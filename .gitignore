@@ -10,6 +10,9 @@
 /*.pfx
 /Nuke-*-Setup.exe
 
+# IDEs
+/.idea
+
 # OS specific
 Thumbs.db
 desktop.ini
