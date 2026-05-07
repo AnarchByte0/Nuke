@@ -67,6 +67,7 @@ jobs:
           fi
 
       - name: Install cargo-dist
+        shell: bash
         run: |
           if [ "$RUNNER_OS" == "Windows" ]; then
             powershell -ExecutionPolicy Bypass -c "irm https://github.com/axodotdev/cargo-dist/releases/download/v0.31.0/cargo-dist-installer.ps1 | iex"
