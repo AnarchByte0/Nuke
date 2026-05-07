@@ -10,7 +10,11 @@ fn main() {
         let mut res = winres::WindowsResource::new();
         res.set("ProductName", "Nuke");
         res.set("FileDescription", "Nuke Desktop Application");
-        // res.set_icon("icon.ico"); // Uncomment if you have an icon.ico
+        res.set("CompanyName", "AnarchByte");
+        res.set("LegalCopyright", "Copyright (c) 2026 AnarchByte");
+        if Path::new("app-icon.ico").exists() {
+            res.set_icon("app-icon.ico");
+        }
         res.compile().unwrap();
     }
 

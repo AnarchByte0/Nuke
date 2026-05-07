@@ -19,15 +19,12 @@ jobs:
           # Windows x64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            arch: x64
           # Windows x86
           - target: i686-pc-windows-msvc
             os: windows-latest
-            arch: x86
           # Windows ARM64
           - target: aarch64-pc-windows-msvc
             os: windows-latest
-            arch: arm64
           # Linux x64
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-22.04
@@ -55,7 +52,7 @@ jobs:
           node-version: 20
 
       # -----------------------------------------------------------------------
-      # LINUX DEPENDENCIES
+      # LINUX DEPENDENCIES (Fix for 4.0/4.1 mismatch)
       # -----------------------------------------------------------------------
       - name: Install Linux Dependencies
         if: runner.os == 'Linux'
@@ -64,90 +61,60 @@ jobs:
           if [ "${{ matrix.target }}" = "i686-unknown-linux-gnu" ]; then
             sudo dpkg --add-architecture i386
             sudo apt-get update
-            # Use 22.04 compatible 32-bit libs
-            sudo apt-get install -y gcc-multilib libgtk-3-dev:i386 libsoup2.4-dev:i386 libwebkit2gtk-4.0-dev:i386
+            sudo apt-get install -y gcc-multilib libgtk-3-dev:i386 libsoup2.4-dev:i386 libwebkit2gtk-4.0-dev:i386 libjavascriptcoregtk-4.0-dev:i386
           elif [ "${{ matrix.os }}" = "ubuntu-24.04-arm64" ]; then
             sudo apt-get install -y libgtk-3-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
           else
-            # Ubuntu 22.04 defaults
-            sudo apt-get install -y libgtk-3-dev libsoup2.4-dev libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
+            # Default Ubuntu 22.04 - Try both to be safe
+            sudo apt-get install -y libgtk-3-dev libsoup2.4-dev libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev || \
+            sudo apt-get install -y libgtk-3-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
           fi
 
       # -----------------------------------------------------------------------
-      # WINDOWS BUILD & MSIX
+      # BUILD PROCESS (Using cargo-dist for EXE/MSI)
       # -----------------------------------------------------------------------
-      - name: Build & Package Windows (MSIX)
-        if: runner.os == 'Windows'
-        shell: pwsh
+      - name: Install cargo-dist
+        shell: bash
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.31.0/cargo-dist-installer.sh | sh
+
+      - name: Build & Package
+        shell: bash
         env:
           PFX_BASE64: ${{ secrets.PFX_BASE64 }}
           PFX_PASSWORD: ${{ secrets.PFX_PASSWORD }}
         run: |
-          cargo build --release --target ${{ matrix.target }}
-          $ver = "${{ github.ref_name }}".TrimStart('v')
-          $msixName = "Nuke-$ver-${{ matrix.target }}.msix"
-          mkdir msix_build/Assets -Force
-          copy target\${{ matrix.target }}\release\Nuke.exe msix_build\
-          $manifest = Get-Content msix_assets\AppxManifest.xml -Raw
-          $manifest = $manifest.Replace("ARCH_PLACEHOLDER", "${{ matrix.arch }}")
-          $manifest | Set-Content msix_build\AppxManifest.xml
-          $Assets = @("StoreLogo.png", "Square150x150Logo.png", "Square44x44Logo.png", "Wide310x150Logo.png", "SplashScreen.png")
-          foreach ($Asset in $Assets) {
-              $Path = "msix_build\Assets\$Asset"
-              if (!(Test-Path $Path)) { New-Item -ItemType File -Path $Path -Value "fake" | Out-Null }
-          }
-          $makeappx = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\makeappx.exe"
-          & $makeappx pack /d msix_build /p $msixName /o
-          if ($env:PFX_BASE64) {
-            $pfxPath = "GitHubCert.pfx"
-            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:PFX_BASE64))
-            $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
-            & $signtool sign /fd SHA256 /a /f $pfxPath /p $env:PFX_PASSWORD $msixName
-          }
-          echo "ARTIFACT_PATH=$msixName" >> $env:GITHUB_ENV
+          # Setup Signing Cert if on Windows
+          if [ "$RUNNER_OS" == "Windows" ] && [ -n "$PFX_BASE64" ]; then
+            echo "$PFX_BASE64" | base64 -d > Nuke.pfx
+          fi
+          
+          # Run cargo-dist build
+          # cargo-dist 0.31.0 supports signing via env or flags, but here we let it generate artifacts
+          # and we'll manually sign the results if needed, or configure dist to do it.
+          # For now, let's use 'cargo dist build' which uses the config in dist-workspace.toml
+          ~/.cargo/bin/dist build --tag=${{ github.ref_name }} --target=${{ matrix.target }} --output-format=json > dist-manifest.json
 
       # -----------------------------------------------------------------------
-      # LINUX BUILD & DEB
+      # SIGNING (Manual for EXE/MSI if dist didn't)
       # -----------------------------------------------------------------------
-      - name: Build & Package Linux (DEB)
-        if: runner.os == 'Linux'
-        shell: bash
+      - name: Sign Windows Artifacts
+        if: runner.os == 'Windows' && env.PFX_BASE64 != ''
+        shell: pwsh
         run: |
-          cargo install cargo-deb
-          cargo build --release --target ${{ matrix.target }}
-          VERSION="${GITHUB_REF_NAME#v}"
-          FILENAME="Nuke-$VERSION-${{ matrix.target }}.deb"
-          cargo deb --target ${{ matrix.target }} --no-build -o $FILENAME
-          echo "ARTIFACT_PATH=$FILENAME" >> $GITHUB_ENV
+          $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
+          Get-ChildItem -Path target/distrib/ -Include *.exe, *.msi -Recurse | ForEach-Object {
+            Write-Host "Signing $($_.FullName)"
+            & $signtool sign /fd SHA256 /a /f Nuke.pfx /p ${{ secrets.PFX_PASSWORD }} $_.FullName
+          }
 
-      # -----------------------------------------------------------------------
-      # MACOS BUILD & DMG
-      # -----------------------------------------------------------------------
-      - name: Build & Package macOS (DMG)
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          cargo build --release --target x86_64-apple-darwin
-          cargo build --release --target aarch64-apple-darwin
-          mkdir -p "Nuke.app/Contents/MacOS"
-          lipo -create target/x86_64-apple-darwin/release/Nuke target/aarch64-apple-darwin/release/Nuke -output "Nuke.app/Contents/MacOS/Nuke"
-          chmod +x "Nuke.app/Contents/MacOS/Nuke"
-          VERSION="${GITHUB_REF_NAME#v}"
-          FILENAME="Nuke-$VERSION-macOS-Universal.dmg"
-          hdiutil create -volname "Nuke Installer" -srcfolder "Nuke.app" -ov -format UDZO $FILENAME
-          echo "ARTIFACT_PATH=$FILENAME" >> $GITHUB_ENV
-
-      # -----------------------------------------------------------------------
-      # COMMON UPLOAD & RELEASE
-      # -----------------------------------------------------------------------
-      - name: Upload Artifact
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Nuke-${{ matrix.target }}
-          path: ${{ env.ARTIFACT_PATH }}
+          path: target/distrib/
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.ARTIFACT_PATH }}
+          files: target/distrib/*
           token: ${{ secrets.GITHUB_TOKEN }}

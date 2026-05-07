@@ -9,6 +9,7 @@ cargo-dist-version = "0.31.0"
 ci = "github"
 # The installers to generate for each app
 installers = ["nsis", "msi", "powershell", "shell"]
+
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = [
   "x86_64-pc-windows-msvc", 
