@@ -9,8 +9,22 @@ permissions:
   contents: write
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      val: ${{ steps.plan.outputs.manifest }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dist
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.43.0/cargo-dist-installer.sh | sh
+      - id: plan
+        run: |
+          dist plan --tag=${{ github.ref_name }} --output-format=json > plan.json
+          echo "manifest=$(cat plan.json | jq -c .)" >> $GITHUB_OUTPUT
+
   build:
     name: Build (${{ matrix.target }})
+    needs: plan
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -18,25 +32,20 @@ jobs:
         include:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            ext: .exe
           - target: i686-pc-windows-msvc
             os: windows-latest
-            ext: .exe
           - target: aarch64-pc-windows-msvc
             os: windows-latest
-            ext: .exe
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-22.04
-            ext: .deb
           - target: i686-unknown-linux-gnu
             os: ubuntu-22.04
-            ext: .deb
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-24.04-arm64
-            ext: .deb
-          - target: universal-apple-darwin
+          - target: x86_64-apple-darwin
             os: macos-latest
-            ext: .dmg
+          - target: aarch64-apple-darwin
+            os: macos-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +53,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target == 'universal-apple-darwin' && 'x86_64-apple-darwin aarch64-apple-darwin' || matrix.target }}
+          targets: ${{ matrix.target }}
 
       - name: Install Node.js
         uses: actions/setup-node@v4
@@ -66,66 +75,33 @@ jobs:
             sudo apt-get install -y libgtk-3-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
           fi
 
-      - name: Install cargo-packager
-        run: cargo install cargo-packager --locked
+      - name: Install dist
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.43.0/cargo-dist-installer.sh | sh
 
-      - name: Build Project
-        run: cargo build --release --target ${{ matrix.target == 'universal-apple-darwin' && 'x86_64-apple-darwin' || matrix.target }}
-
-      - name: Build macOS Second Arch (Universal Only)
-        if: matrix.target == 'universal-apple-darwin'
-        run: cargo build --release --target aarch64-apple-darwin
-
-      - name: Package & Rename Artifacts
-        shell: pwsh
+      - name: Build & Package
+        shell: bash
         env:
           PFX_BASE64: ${{ secrets.PFX_BASE64 }}
           PFX_PASSWORD: ${{ secrets.PFX_PASSWORD }}
         run: |
-          # 1. Setup Cert
-          if ("${{ runner.os }}" -eq "Windows" -and $env:PFX_BASE64) {
-            [IO.File]::WriteAllBytes("Nuke.pfx", [Convert]::FromBase64String($env:PFX_BASE64))
-          }
-          
-          # 2. Run Packager
-          if ("${{ matrix.target }}" -eq "universal-apple-darwin") {
-             cargo packager --release --target x86_64-apple-darwin
-          } else {
-             cargo packager --release --target ${{ matrix.target }}
-          }
-          
-          # 3. Create Final Release Dir
-          mkdir final_artifacts -Force
-          $ver = "${{ github.ref_name }}".TrimStart('v')
-          
-          # 4. Find and Rename Files to technical format (Nuke-Version-Target.ext)
-          Get-ChildItem -Path target/release/bundle/ -Recurse | Where-Object { ! $_.PSIsContainer } | ForEach-Object {
-              $ext = $_.Extension
-              $newFileName = "Nuke-$ver-${{ matrix.target }}$ext"
-              
-              # Handle NSIS vs MSI specific naming if both exist
-              if ($_.FullName -like "*nsis*") { $newFileName = "Nuke-$ver-${{ matrix.target }}-Setup.exe" }
-              if ($_.FullName -like "*wix*") { $newFileName = "Nuke-$ver-${{ matrix.target }}.msi" }
-              
-              Write-Host "Processing: $($_.Name) -> $newFileName"
-              
-              # Sign if Windows
-              if ("${{ runner.os }}" -eq "Windows" -and (".exe", ".msi" -contains $ext) -and $env:PFX_BASE64) {
-                  $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
-                  & $signtool sign /fd SHA256 /a /f Nuke.pfx /p $env:PFX_PASSWORD $_.FullName
-              }
-              
-              Copy-Item $_.FullName "final_artifacts/$newFileName" -Force
+          if [ "$RUNNER_OS" == "Windows" ] && [ -n "$PFX_BASE64" ]; then
+            echo "$PFX_BASE64" | base64 -d > Nuke.pfx
+          fi
+          # Run official dist build
+          dist build --tag=${{ github.ref_name }} --target=${{ matrix.target }} --output-format=json > dist-manifest.json
+
+      # Signing Windows files (EXE and MSI)
+      - name: Sign Windows Artifacts
+        if: runner.os == 'Windows' && env.PFX_BASE64 != ''
+        shell: pwsh
+        run: |
+          $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
+          Get-ChildItem -Path target/distrib/ -Include *.exe, *.msi -Recurse | ForEach-Object {
+            & $signtool sign /fd SHA256 /a /f Nuke.pfx /p "${{ secrets.PFX_PASSWORD }}" $_.FullName
           }
 
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: Nuke-${{ matrix.target }}
-          path: final_artifacts/*
-
-      - name: Release
+      - name: Upload & Release
         uses: softprops/action-gh-release@v2
         with:
-          files: final_artifacts/*
+          files: target/distrib/**/*
           token: ${{ secrets.GITHUB_TOKEN }}
