@@ -16,31 +16,21 @@ jobs:
           # Windows x64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            suffix: .exe
           # Windows x86 (32-bit)
           - target: i686-pc-windows-msvc
             os: windows-latest
-            suffix: .exe
           # Windows ARM64
           - target: aarch64-pc-windows-msvc
             os: windows-latest
-            suffix: .exe
-          # Linux x64
+          # Linux x64 (.deb)
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            suffix: ""
-          # Linux ARM64
+          # Linux ARM64 (.deb)
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
-            suffix: ""
-          # macOS x64 (Intel)
-          - target: x86_64-apple-darwin
+          # macOS Universal (.dmg)
+          - target: universal-apple-darwin
             os: macos-latest
-            suffix: ""
-          # macOS ARM64 (Apple Silicon)
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            suffix: ""
 
     steps:
       - uses: actions/checkout@v4
@@ -48,61 +38,86 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.target == 'universal-apple-darwin' && 'x86_64-apple-darwin aarch64-apple-darwin' || matrix.target }}
 
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      - name: Build Rust Project
-        shell: bash
-        run: cargo build --release --target ${{ matrix.target }}
-
-      # Windows-specific: MSIX Creation & Signing
-      - name: Package & Sign MSIX (Windows Only)
+      # -----------------------------------------------------------------------
+      # WINDOWS BUILD (.msix)
+      # -----------------------------------------------------------------------
+      - name: Build & Package Windows (MSIX)
         if: runner.os == 'Windows'
         shell: pwsh
         env:
           PFX_BASE64: ${{ secrets.PFX_BASE64 }}
           PFX_PASSWORD: ${{ secrets.PFX_PASSWORD }}
         run: |
+          cargo build --release --target ${{ matrix.target }}
           $ver = "${{ github.ref_name }}".TrimStart('v')
           $msixName = "Nuke-$ver-${{ matrix.target }}.msix"
           mkdir msix_build/Assets -Force
           copy target\${{ matrix.target }}\release\Nuke.exe msix_build\
           copy msix_assets\AppxManifest.xml msix_build\
-          
-          # Placeholder assets
           $Assets = @("StoreLogo.png", "Square150x150Logo.png", "Square44x44Logo.png", "Wide310x150Logo.png", "SplashScreen.png")
           foreach ($Asset in $Assets) {
               $Path = "msix_build\Assets\$Asset"
               if (!(Test-Path $Path)) { New-Item -ItemType File -Path $Path -Value "fake" | Out-Null }
           }
-          
           $makeappx = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\makeappx.exe"
           & $makeappx pack /d msix_build /p $msixName /o
-          
           if ($env:PFX_BASE64) {
             $pfxPath = "GitHubCert.pfx"
             [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:PFX_BASE64))
             $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
             & $signtool sign /fd SHA256 /a /f $pfxPath /p $env:PFX_PASSWORD $msixName
           }
-          Write-Output "ARTIFACT_PATH=$msixName" >> $env:GITHUB_ENV
+          echo "ARTIFACT_PATH=$msixName" >> $env:GITHUB_ENV
 
-      # Linux/macOS: Create tar.gz
-      - name: Package Archive (Unix)
-        if: runner.os != 'Windows'
+      # -----------------------------------------------------------------------
+      # LINUX BUILD (.deb)
+      # -----------------------------------------------------------------------
+      - name: Build & Package Linux (DEB)
+        if: runner.os == 'Linux'
         shell: bash
         run: |
+          sudo apt-get update && sudo apt-get install -y libgtk-3-dev libsoup2.4-dev libwebkit2gtk-4.0-dev
+          cargo install cargo-deb
+          cargo build --release --target ${{ matrix.target }}
           VERSION="${GITHUB_REF_NAME#v}"
-          FILENAME="Nuke-$VERSION-${{ matrix.target }}.tar.gz"
-          cd target/${{ matrix.target }}/release/
-          tar -czf ../../../$FILENAME Nuke
-          cd ../../../
+          FILENAME="Nuke-$VERSION-${{ matrix.target }}.deb"
+          cargo deb --target ${{ matrix.target }} --no-build -o $FILENAME
           echo "ARTIFACT_PATH=$FILENAME" >> $GITHUB_ENV
 
+      # -----------------------------------------------------------------------
+      # MACOS BUILD (.dmg)
+      # -----------------------------------------------------------------------
+      - name: Build & Package macOS (DMG)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          # Build for both architectures
+          cargo build --release --target x86_64-apple-darwin
+          cargo build --release --target aarch64-apple-darwin
+          
+          # Create Universal Binary
+          mkdir -p "Nuke.app/Contents/MacOS"
+          lipo -create target/x86_64-apple-darwin/release/Nuke target/aarch64-apple-darwin/release/Nuke -output "Nuke.app/Contents/MacOS/Nuke"
+          
+          # Basic App Structure
+          chmod +x "Nuke.app/Contents/MacOS/Nuke"
+          
+          # Create DMG
+          VERSION="${GITHUB_REF_NAME#v}"
+          FILENAME="Nuke-$VERSION-macOS-Universal.dmg"
+          hdiutil create -volname "Nuke Installer" -srcfolder "Nuke.app" -ov -format UDZO $FILENAME
+          echo "ARTIFACT_PATH=$FILENAME" >> $GITHUB_ENV
+
+      # -----------------------------------------------------------------------
+      # COMMON STEPS
+      # -----------------------------------------------------------------------
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
