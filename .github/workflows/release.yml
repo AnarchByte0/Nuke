@@ -121,16 +121,18 @@ jobs:
             }
           }
           
-          # Copy and rename official installers from packager
-          if (Test-Path "target/release/bundle") {
-            Get-ChildItem -Path target/release/bundle/ -Recurse | Where-Object { ! $_.PSIsContainer } | ForEach-Object {
+          # Copy and rename official installers from packager (search entire target folder)
+          # We look for files in any 'bundle' or 'release' subdirectories that aren't the final_dist
+          Get-ChildItem -Path target/ -Recurse -Include *.exe, *.msi, *.deb, *.dmg | Where-Object { 
+              $_.FullName -notlike "*final_dist*" -and $_.FullName -notlike "*target/dist/*"
+          } | ForEach-Object {
               $ext = $_.Extension
               $newFileName = "Nuke-$ver-$target$ext"
               
               if ($_.FullName -like "*nsis*") { $newFileName = "Nuke-$ver-$target-Setup.exe" }
               if ($_.FullName -like "*wix*") { $newFileName = "Nuke-$ver-$target.msi" }
               
-              Write-Host "Processing: $($_.Name) -> $newFileName"
+              Write-Host "Processing installer: $($_.Name) -> $newFileName"
               
               # Sign if Windows
               if ($os -match "windows" -and (".exe", ".msi" -contains $ext) -and $env:PFX_BASE64) {
@@ -141,7 +143,6 @@ jobs:
               }
               
               Copy-Item $_.FullName "target/final_dist/$newFileName" -Force
-            }
           }
 
       - name: Upload & Release
