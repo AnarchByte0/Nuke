@@ -6,12 +6,6 @@ authors = ["AnarchByte"]
 description = "Nuke"
 repository = "https://github.com/AnarchByte/Nuke"
 
-[package.metadata.wix]
-upgrade-guid = "BB03A8CB-D147-4A0C-9193-D397DBF24DFD"
-path-guid = "2F36CCD6-F711-4D98-90A9-B1D41FC73B01"
-license = false
-eula = false
-
 [[bin]]
 name = "Nuke"
 path = "src/main.rs"
@@ -41,15 +35,12 @@ vendor = "AnarchByte"
 copyright = "Copyright (c) 2026 AnarchByte"
 description = "Nuke Desktop Application"
 homepage = "https://github.com/AnarchByte/Nuke"
-icons = ["app-icon.ico"]
+# Packager expects an array of formats at the top level or per-platform
+formats = ["nsis", "msi", "deb", "dmg"]
 out_dir = "target/release/bundle"
 
 [package.metadata.packager.windows]
-formats = ["nsis", "msi"]
-# Signing will be handled by the script or packager if env vars are present
-
-[package.metadata.packager.linux]
-formats = ["deb"]
-
-[package.metadata.packager.macos]
-formats = ["dmg"]
+# Removed nested formats to avoid deserialization error
+# Packager will use the top-level formats filtered by platform availability
+# You can also add icons here if needed
+# icons = ["app-icon.ico"]
