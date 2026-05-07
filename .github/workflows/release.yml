@@ -9,24 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  plan:
-    runs-on: ubuntu-latest
-    outputs:
-      val: ${{ steps.plan.outputs.manifest }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install dist
-        run: |
-          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.43.0/cargo-dist-installer.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-      - id: plan
-        run: |
-          dist plan --tag=${{ github.ref_name }} --output-format=json > plan.json
-          echo "manifest=$(cat plan.json | jq -c .)" >> $GITHUB_OUTPUT
-
   build:
     name: Build (${{ matrix.target }})
-    needs: plan
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
