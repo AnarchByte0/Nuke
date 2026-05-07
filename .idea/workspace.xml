@@ -12,7 +12,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="d7e40f97-46d6-43ef-b84b-a1a2b97ddbcb" name="Changes" comment="Init">
-      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -134,7 +134,7 @@
       <option name="presentableId" value="Default" />
       <updated>1778082190213</updated>
       <workItem from="1778082191241" duration="4454000" />
-      <workItem from="1778103487328" duration="8993000" />
+      <workItem from="1778103487328" duration="9595000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
