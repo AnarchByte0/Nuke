@@ -4,7 +4,7 @@ version = "0.5.1"
 edition = "2024"
 authors = ["AnarchByte"]
 description = "Nuke"
-repository = "https://github.com/AnarchByte/Nuke"
+repository = "https://github.com/AnarchByte0/Nuke"
 
 [[bin]]
 name = "Nuke"
@@ -29,20 +29,12 @@ lto = "thin"
 
 [package.metadata.packager]
 product_name = "Nuke"
-identifier = "com.anarchbyte.nuke"
+identifier = "ua.AnarchByte.Nuke"
 version = "0.5.1"
 publisher = "AnarchByte"
 copyright = "Copyright (c) 2026 AnarchByte"
-description = "Nuke Desktop Application"
-homepage = "https://github.com/AnarchByte/Nuke"
+description = "Nuke"
+homepage = "https://github.com/AnarchByte0/Nuke"
+formats = ["nsis", "wix", "deb", "dmg"]
 icons = ["app-icon.ico"]
 out_dir = "target/release/bundle"
-
-[package.metadata.packager.windows]
-formats = ["nsis", "wix"]
-
-[package.metadata.packager.linux]
-formats = ["deb"]
-
-[package.metadata.packager.macos]
-formats = ["dmg"]
