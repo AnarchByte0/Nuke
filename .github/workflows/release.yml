@@ -103,10 +103,16 @@ jobs:
           & dist build --tag=${{ github.ref_name }} --target=$target --output-format=json > dist-manifest.json
           
           # 3. Run Official Build (cargo-packager)
-          & cargo packager --release --target $target
+          # Select formats based on OS
+          $formats = "nsis,wix"
+          if ($os -match "ubuntu") { $formats = "deb" }
+          if ($os -match "macos") { $formats = "dmg" }
+          
+          Write-Host "Packaging for formats: $formats"
+          & cargo packager --release --target $target --formats $formats
           
           # 4. Prepare Final Artifacts
-          mkdir target/final_dist -Force
+          New-Item -Path "target/final_dist" -ItemType Directory -Force
           
           # Copy technical binaries from dist
           if (Test-Path "target/dist") {
