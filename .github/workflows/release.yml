@@ -16,16 +16,22 @@ jobs:
           # Windows x64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-          # Windows x86
+            arch: x64
+          # Windows x86 (32-bit)
           - target: i686-pc-windows-msvc
             os: windows-latest
+            arch: x86
           # Windows ARM64
           - target: aarch64-pc-windows-msvc
             os: windows-latest
-          # Linux x64
+            arch: arm64
+          # Linux x64 (.deb)
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-          # macOS Universal
+            os: ubuntu-24.04
+          # Linux ARM64 (.deb)
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm64
+          # macOS Universal (.dmg)
           - target: universal-apple-darwin
             os: macos-latest
 
@@ -40,19 +46,19 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
       # -----------------------------------------------------------------------
-      # LINUX DEPENDENCIES (Install BEFORE build)
+      # LINUX DEPENDENCIES (Ubuntu 24.04 uses 4.1)
       # -----------------------------------------------------------------------
       - name: Install Linux Dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libsoup2.4-dev libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
+          sudo apt-get install -y libgtk-3-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
 
       # -----------------------------------------------------------------------
-      # WINDOWS BUILD & MSIX
+      # WINDOWS BUILD (.msix)
       # -----------------------------------------------------------------------
       - name: Build & Package Windows (MSIX)
         if: runner.os == 'Windows'
@@ -64,16 +70,26 @@ jobs:
           cargo build --release --target ${{ matrix.target }}
           $ver = "${{ github.ref_name }}".TrimStart('v')
           $msixName = "Nuke-$ver-${{ matrix.target }}.msix"
+          
+          # Prepare Build Dir
           mkdir msix_build/Assets -Force
           copy target\${{ matrix.target }}\release\Nuke.exe msix_build\
-          copy msix_assets\AppxManifest.xml msix_build\
+          
+          # Replace Architecture in Manifest
+          $manifest = Get-Content msix_assets\AppxManifest.xml -Raw
+          $manifest = $manifest.Replace("ARCH_PLACEHOLDER", "${{ matrix.arch }}")
+          $manifest | Set-Content msix_build\AppxManifest.xml
+          
+          # Placeholder assets
           $Assets = @("StoreLogo.png", "Square150x150Logo.png", "Square44x44Logo.png", "Wide310x150Logo.png", "SplashScreen.png")
           foreach ($Asset in $Assets) {
               $Path = "msix_build\Assets\$Asset"
               if (!(Test-Path $Path)) { New-Item -ItemType File -Path $Path -Value "fake" | Out-Null }
           }
+          
           $makeappx = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\makeappx.exe"
           & $makeappx pack /d msix_build /p $msixName /o
+          
           if ($env:PFX_BASE64) {
             $pfxPath = "GitHubCert.pfx"
             [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:PFX_BASE64))
@@ -83,7 +99,7 @@ jobs:
           echo "ARTIFACT_PATH=$msixName" >> $env:GITHUB_ENV
 
       # -----------------------------------------------------------------------
-      # LINUX BUILD & DEB
+      # LINUX BUILD (.deb)
       # -----------------------------------------------------------------------
       - name: Build & Package Linux (DEB)
         if: runner.os == 'Linux'
@@ -97,7 +113,7 @@ jobs:
           echo "ARTIFACT_PATH=$FILENAME" >> $GITHUB_ENV
 
       # -----------------------------------------------------------------------
-      # MACOS BUILD & DMG
+      # MACOS BUILD (.dmg)
       # -----------------------------------------------------------------------
       - name: Build & Package macOS (DMG)
         if: runner.os == 'macOS'

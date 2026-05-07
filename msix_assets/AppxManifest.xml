@@ -9,7 +9,7 @@
     Name="AnarchByte.Nuke"
     Publisher="CN=AnarchByte"
     Version="0.4.0.0"
-    ProcessorArchitecture="x64" />
+    ProcessorArchitecture="ARCH_PLACEHOLDER" />
 
   <Properties>
     <DisplayName>Nuke</DisplayName>
