@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "Nuke"
-version = "0.5.1"
+version = "0.5.4"
 dependencies = [
  "axoupdater",
  "include_dir",
