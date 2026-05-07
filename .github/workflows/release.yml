@@ -66,51 +66,80 @@ jobs:
               libjavascriptcoregtk-4.1-dev
           fi
 
-      - name: Install cargo-dist
+      - name: Install Tools (dist & packager)
         shell: bash
         run: |
+          # Install cargo-dist
           if [ "$RUNNER_OS" == "Windows" ]; then
             powershell -ExecutionPolicy Bypass -c "irm https://github.com/axodotdev/cargo-dist/releases/download/v0.31.0/cargo-dist-installer.ps1 | iex"
-            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           else
             curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.31.0/cargo-dist-installer.sh | sh
-            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           fi
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          
+          # Install cargo-packager
+          cargo install cargo-packager --locked
 
-      - name: Build & Package
-        shell: bash
+      - name: Build & Package (Technical & Official)
+        shell: pwsh
         env:
           PFX_BASE64: ${{ secrets.PFX_BASE64 }}
           PFX_PASSWORD: ${{ secrets.PFX_PASSWORD }}
           PKG_CONFIG_ALLOW_CROSS: 1
         run: |
-          if [ "${{ matrix.target }}" = "i686-unknown-linux-gnu" ]; then
-            export PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig
-          fi
-          if [ "$RUNNER_OS" == "Windows" ] && [ -n "$PFX_BASE64" ]; then
-            echo "$PFX_BASE64" | base64 -d > Nuke.pfx
-          fi
-          # Run official dist build
-          dist build --tag=${{ github.ref_name }} --target=${{ matrix.target }} --output-format=json > dist-manifest.json
-
-      # Signing Windows files (EXE and MSI)
-      - name: Sign Windows Artifacts
-        if: runner.os == 'Windows' && env.PFX_BASE64 != ''
-        shell: pwsh
-        run: |
-          $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\" -Filter "signtool.exe" -Recurse | Sort-Object -Property LastWriteTime -Descending | Select-Object -First 1
-          if ($signtool) {
-            Write-Host "Using SignTool at: $($signtool.FullName)"
-            Get-ChildItem -Path target/dist/ -Include *.exe, *.msi -Recurse | ForEach-Object {
-              & $signtool.FullName sign /fd SHA256 /a /f Nuke.pfx /p "${{ secrets.PFX_PASSWORD }}" $_.FullName
+          $target = "${{ matrix.target }}"
+          $os = "${{ matrix.os }}"
+          $ver = "${{ github.ref_name }}".TrimStart('v')
+          
+          # 1. Setup Cert
+          if ($env:PFX_BASE64) {
+            [IO.File]::WriteAllBytes("Nuke.pfx", [Convert]::FromBase64String($env:PFX_BASE64))
+          }
+          
+          # 2. Run Technical Build (cargo-dist)
+          if ($target -eq "i686-unknown-linux-gnu") {
+            $env:PKG_CONFIG_PATH = "/usr/lib/i386-linux-gnu/pkgconfig"
+          }
+          & dist build --tag=${{ github.ref_name }} --target=$target --output-format=json > dist-manifest.json
+          
+          # 3. Run Official Build (cargo-packager)
+          & cargo packager --release --target $target
+          
+          # 4. Prepare Final Artifacts
+          mkdir target/final_dist -Force
+          
+          # Copy technical binaries from dist
+          if (Test-Path "target/dist") {
+            Get-ChildItem -Path target/dist/ -Recurse | Where-Object { ! $_.PSIsContainer } | ForEach-Object {
+              Copy-Item $_.FullName "target/final_dist/" -Force
             }
-          } else {
-            Write-Error "SignTool.exe not found!"
-            exit 1
+          }
+          
+          # Copy and rename official installers from packager
+          if (Test-Path "target/release/bundle") {
+            Get-ChildItem -Path target/release/bundle/ -Recurse | Where-Object { ! $_.PSIsContainer } | ForEach-Object {
+              $ext = $_.Extension
+              $newFileName = "Nuke-$ver-$target$ext"
+              
+              if ($_.FullName -like "*nsis*") { $newFileName = "Nuke-$ver-$target-Setup.exe" }
+              if ($_.FullName -like "*wix*") { $newFileName = "Nuke-$ver-$target.msi" }
+              
+              Write-Host "Processing: $($_.Name) -> $newFileName"
+              
+              # Sign if Windows
+              if ($os -match "windows" -and (".exe", ".msi" -contains $ext) -and $env:PFX_BASE64) {
+                  $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\" -Filter "signtool.exe" -Recurse | Sort-Object -Property LastWriteTime -Descending | Select-Object -First 1
+                  if ($signtool) {
+                    & $signtool.FullName sign /fd SHA256 /a /f Nuke.pfx /p $env:PFX_PASSWORD $_.FullName
+                  }
+              }
+              
+              Copy-Item $_.FullName "target/final_dist/$newFileName" -Force
+            }
           }
 
       - name: Upload & Release
         uses: softprops/action-gh-release@v2
         with:
-          files: target/dist/**/*
+          files: target/final_dist/**/*
           token: ${{ secrets.GITHUB_TOKEN }}
