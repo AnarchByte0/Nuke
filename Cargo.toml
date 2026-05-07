@@ -36,7 +36,7 @@ copyright = "Copyright (c) 2026 AnarchByte"
 description = "Nuke Desktop Application"
 homepage = "https://github.com/AnarchByte/Nuke"
 # Packager expects an array of formats at the top level or per-platform
-formats = ["nsis", "msi", "deb", "dmg"]
+formats = ["nsis", "wix", "deb", "dmg"]
 out_dir = "target/release/bundle"
 
 [package.metadata.packager.windows]
