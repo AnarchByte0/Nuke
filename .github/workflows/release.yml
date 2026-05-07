@@ -18,18 +18,25 @@ jobs:
         include:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+            ext: .exe
           - target: i686-pc-windows-msvc
             os: windows-latest
+            ext: .exe
           - target: aarch64-pc-windows-msvc
             os: windows-latest
+            ext: .exe
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-22.04
+            ext: .deb
           - target: i686-unknown-linux-gnu
             os: ubuntu-22.04
+            ext: .deb
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-24.04-arm64
+            ext: .deb
           - target: universal-apple-darwin
             os: macos-latest
+            ext: .dmg
 
     steps:
       - uses: actions/checkout@v4
@@ -65,49 +72,60 @@ jobs:
       - name: Build Project
         run: cargo build --release --target ${{ matrix.target == 'universal-apple-darwin' && 'x86_64-apple-darwin' || matrix.target }}
 
-      # For Universal macOS, we need to build the second arch and then use lipo
       - name: Build macOS Second Arch (Universal Only)
         if: matrix.target == 'universal-apple-darwin'
         run: cargo build --release --target aarch64-apple-darwin
 
-      - name: Package Application
-        shell: bash
+      - name: Package & Rename Artifacts
+        shell: pwsh
         env:
           PFX_BASE64: ${{ secrets.PFX_BASE64 }}
           PFX_PASSWORD: ${{ secrets.PFX_PASSWORD }}
         run: |
-          # 1. Sign cert setup for Windows
-          if [ "$RUNNER_OS" == "Windows" ] && [ -n "$PFX_BASE64" ]; then
-            echo "$PFX_BASE64" | base64 -d > Nuke.pfx
-          fi
+          # 1. Setup Cert
+          if ("${{ runner.os }}" -eq "Windows" -and $env:PFX_BASE64) {
+            [IO.File]::WriteAllBytes("Nuke.pfx", [Convert]::FromBase64String($env:PFX_BASE64))
+          }
           
-          # 2. Run packager
-          if [ "${{ matrix.target }}" = "universal-apple-darwin" ]; then
-            # Packager handles universal bundles if configured, or we do it manually
-            # For now, let's use the standard release targets
-            cargo packager --release --target x86_64-apple-darwin
-          else
-            cargo packager --release --target ${{ matrix.target }}
-          fi
-
-      - name: Sign Windows Installers
-        if: runner.os == 'Windows' && env.PFX_BASE64 != ''
-        shell: pwsh
-        run: |
-          $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
-          Get-ChildItem -Path target/release/bundle/ -Include *.exe, *.msi -Recurse | ForEach-Object {
-            Write-Host "Signing $($_.FullName)"
-            & $signtool sign /fd SHA256 /a /f Nuke.pfx /p "${{ secrets.PFX_PASSWORD }}" $_.FullName
+          # 2. Run Packager
+          if ("${{ matrix.target }}" -eq "universal-apple-darwin") {
+             cargo packager --release --target x86_64-apple-darwin
+          } else {
+             cargo packager --release --target ${{ matrix.target }}
+          }
+          
+          # 3. Create Final Release Dir
+          mkdir final_artifacts -Force
+          $ver = "${{ github.ref_name }}".TrimStart('v')
+          
+          # 4. Find and Rename Files to technical format (Nuke-Version-Target.ext)
+          Get-ChildItem -Path target/release/bundle/ -Recurse | Where-Object { ! $_.PSIsContainer } | ForEach-Object {
+              $ext = $_.Extension
+              $newFileName = "Nuke-$ver-${{ matrix.target }}$ext"
+              
+              # Handle NSIS vs MSI specific naming if both exist
+              if ($_.FullName -like "*nsis*") { $newFileName = "Nuke-$ver-${{ matrix.target }}-Setup.exe" }
+              if ($_.FullName -like "*wix*") { $newFileName = "Nuke-$ver-${{ matrix.target }}.msi" }
+              
+              Write-Host "Processing: $($_.Name) -> $newFileName"
+              
+              # Sign if Windows
+              if ("${{ runner.os }}" -eq "Windows" -and (".exe", ".msi" -contains $ext) -and $env:PFX_BASE64) {
+                  $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
+                  & $signtool sign /fd SHA256 /a /f Nuke.pfx /p $env:PFX_PASSWORD $_.FullName
+              }
+              
+              Copy-Item $_.FullName "final_artifacts/$newFileName" -Force
           }
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Nuke-${{ matrix.target }}
-          path: target/release/bundle/*
+          path: final_artifacts/*
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          files: target/release/bundle/**/*
+          files: final_artifacts/*
           token: ${{ secrets.GITHUB_TOKEN }}

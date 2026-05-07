@@ -13,7 +13,6 @@
   <component name="ChangeListManager">
     <list default="true" id="d7e40f97-46d6-43ef-b84b-a1a2b97ddbcb" name="Changes" comment="Init">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -24,7 +23,7 @@
     <option name="cachedIndexableFilesCount" value="21" />
     <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
   </component>
-  <component name="ExecutionTargetManager" SELECTED_TARGET="RsBuildProfile:dev" />
+  <component name="ExecutionTargetManager" SELECTED_TARGET="RsBuildProfile:release" />
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
@@ -59,6 +58,7 @@
   &quot;keyToString&quot;: {
     &quot;Cargo.Dist.executor&quot;: &quot;Run&quot;,
     &quot;Cargo.Package.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Packager.executor&quot;: &quot;Run&quot;,
     &quot;Cargo.Run.executor&quot;: &quot;Run&quot;,
     &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
@@ -90,9 +90,9 @@
       <envs />
       <option name="emulateTerminal" value="true" />
       <option name="channel" value="DEFAULT" />
-      <option name="requiredFeatures" value="false" />
+      <option name="requiredFeatures" value="true" />
       <option name="allFeatures" value="false" />
-      <option name="withSudo" value="false" />
+      <option name="withSudo" value="true" />
       <option name="buildTarget" value="REMOTE" />
       <option name="backtrace" value="SHORT" />
       <option name="isRedirectInput" value="false" />
@@ -102,7 +102,7 @@
       </method>
     </configuration>
     <configuration name="Run" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-      <option name="buildProfileId" value="dev" />
+      <option name="buildProfileId" value="release" />
       <option name="command" value="run --package Nuke --bin Nuke" />
       <option name="workingDirectory" value="file://$PROJECT_DIR$" />
       <envs />
@@ -135,7 +135,7 @@
       <option name="presentableId" value="Default" />
       <updated>1778082190213</updated>
       <workItem from="1778082191241" duration="4454000" />
-      <workItem from="1778103487328" duration="10856000" />
+      <workItem from="1778103487328" duration="11472000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
