@@ -32,3 +32,24 @@ winres = "0.1"
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+[package.metadata.packager]
+product_name = "Nuke"
+identifier = "com.anarchbyte.nuke"
+version = "0.5.1"
+vendor = "AnarchByte"
+copyright = "Copyright (c) 2026 AnarchByte"
+description = "Nuke Desktop Application"
+homepage = "https://github.com/AnarchByte/Nuke"
+icons = ["app-icon.ico"]
+out_dir = "target/release/bundle"
+
+[package.metadata.packager.windows]
+formats = ["nsis", "msi"]
+# Signing will be handled by the script or packager if env vars are present
+
+[package.metadata.packager.linux]
+formats = ["deb"]
+
+[package.metadata.packager.macos]
+formats = ["dmg"]

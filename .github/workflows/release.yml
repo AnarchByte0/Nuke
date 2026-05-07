@@ -16,25 +16,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Windows x64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-          # Windows x86
           - target: i686-pc-windows-msvc
             os: windows-latest
-          # Windows ARM64
           - target: aarch64-pc-windows-msvc
             os: windows-latest
-          # Linux x64
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-22.04
-          # Linux x86
           - target: i686-unknown-linux-gnu
             os: ubuntu-22.04
-          # Linux ARM64
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-24.04-arm64
-          # macOS Universal
           - target: universal-apple-darwin
             os: macos-latest
 
@@ -51,10 +44,7 @@ jobs:
         with:
           node-version: 20
 
-      # -----------------------------------------------------------------------
-      # LINUX DEPENDENCIES
-      # -----------------------------------------------------------------------
-      - name: Install Linux Dependencies
+      - name: Install System Dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -65,53 +55,47 @@ jobs:
           elif [ "${{ matrix.os }}" = "ubuntu-24.04-arm64" ]; then
             sudo apt-get install -y libgtk-3-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
           else
-            # Try both 4.0 and 4.1 for standard Linux x64
             sudo apt-get install -y libgtk-3-dev libsoup2.4-dev libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev || \
             sudo apt-get install -y libgtk-3-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
           fi
 
-      # -----------------------------------------------------------------------
-      # BUILD PROCESS
-      # -----------------------------------------------------------------------
-      - name: Install cargo-dist (Latest)
-        shell: bash
-        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/latest/download/cargo-dist-installer.sh | sh
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --locked
 
-      - name: Build & Package
+      - name: Build Project
+        run: cargo build --release --target ${{ matrix.target == 'universal-apple-darwin' && 'x86_64-apple-darwin' || matrix.target }}
+
+      # For Universal macOS, we need to build the second arch and then use lipo
+      - name: Build macOS Second Arch (Universal Only)
+        if: matrix.target == 'universal-apple-darwin'
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: Package Application
         shell: bash
         env:
           PFX_BASE64: ${{ secrets.PFX_BASE64 }}
           PFX_PASSWORD: ${{ secrets.PFX_PASSWORD }}
         run: |
+          # 1. Sign cert setup for Windows
           if [ "$RUNNER_OS" == "Windows" ] && [ -n "$PFX_BASE64" ]; then
             echo "$PFX_BASE64" | base64 -d > Nuke.pfx
           fi
-          # Use local dist if installed in home
-          DIST_BIN="$HOME/.cargo/bin/dist"
-          if [ ! -f "$DIST_BIN" ]; then DIST_BIN="dist"; fi
-          $DIST_BIN build --tag=${{ github.ref_name }} --target=${{ matrix.target }} --output-format=json > dist-manifest.json
+          
+          # 2. Run packager
+          if [ "${{ matrix.target }}" = "universal-apple-darwin" ]; then
+            # Packager handles universal bundles if configured, or we do it manually
+            # For now, let's use the standard release targets
+            cargo packager --release --target x86_64-apple-darwin
+          else
+            cargo packager --release --target ${{ matrix.target }}
+          fi
 
-      # -----------------------------------------------------------------------
-      # MANUAL NSIS FOR WINDOWS (Fallback if dist fails to provide it)
-      # -----------------------------------------------------------------------
-      - name: Manual NSIS Build (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          if (Test-Path "installer.nsi") {
-            makensis /DVERSION=${{ github.ref_name }} installer.nsi
-            Move-Item "Nuke-*-Setup.exe" "target/distrib/" -ErrorAction SilentlyContinue
-          }
-
-      # -----------------------------------------------------------------------
-      # SIGNING
-      # -----------------------------------------------------------------------
-      - name: Sign Windows Artifacts
+      - name: Sign Windows Installers
         if: runner.os == 'Windows' && env.PFX_BASE64 != ''
         shell: pwsh
         run: |
           $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
-          Get-ChildItem -Path target/distrib/ -Include *.exe, *.msi -Recurse | ForEach-Object {
+          Get-ChildItem -Path target/release/bundle/ -Include *.exe, *.msi -Recurse | ForEach-Object {
             Write-Host "Signing $($_.FullName)"
             & $signtool sign /fd SHA256 /a /f Nuke.pfx /p "${{ secrets.PFX_PASSWORD }}" $_.FullName
           }
@@ -120,10 +104,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Nuke-${{ matrix.target }}
-          path: target/distrib/
+          path: target/release/bundle/*
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          files: target/distrib/*
+          files: target/release/bundle/**/*
           token: ${{ secrets.GITHUB_TOKEN }}
