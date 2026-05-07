@@ -121,28 +121,29 @@ jobs:
             }
           }
           
-          # Copy and rename official installers from packager (search entire target folder)
-          # We look for files in any 'bundle' or 'release' subdirectories that aren't the final_dist
-          Get-ChildItem -Path target/ -Recurse -Include *.exe, *.msi, *.deb, *.dmg | Where-Object { 
-              $_.FullName -notlike "*final_dist*" -and $_.FullName -notlike "*target/dist/*"
-          } | ForEach-Object {
-              $ext = $_.Extension
-              $newFileName = "Nuke-$ver-$target$ext"
-              
-              if ($_.FullName -like "*nsis*") { $newFileName = "Nuke-$ver-$target-Setup.exe" }
-              if ($_.FullName -like "*wix*") { $newFileName = "Nuke-$ver-$target.msi" }
-              
-              Write-Host "Processing installer: $($_.Name) -> $newFileName"
-              
-              # Sign if Windows
-              if ($os -match "windows" -and (".exe", ".msi" -contains $ext) -and $env:PFX_BASE64) {
-                  $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\" -Filter "signtool.exe" -Recurse | Sort-Object -Property LastWriteTime -Descending | Select-Object -First 1
-                  if ($signtool) {
-                    & $signtool.FullName sign /fd SHA256 /a /f Nuke.pfx /p $env:PFX_PASSWORD $_.FullName
-                  }
-              }
-              
-              Copy-Item $_.FullName "target/final_dist/$newFileName" -Force
+          # Copy and rename official installers from packager (search only bundle folder)
+          if (Test-Path "target/release/bundle") {
+            Get-ChildItem -Path target/release/bundle/ -Recurse -Include *.exe, *.msi, *.deb, *.dmg | ForEach-Object {
+                $ext = $_.Extension
+                $newFileName = "Nuke-$ver-$target$ext"
+                
+                if ($_.FullName -like "*nsis*") { $newFileName = "Nuke-$ver-$target-Setup.exe" }
+                if ($_.FullName -like "*wix*") { $newFileName = "Nuke-$ver-$target.msi" }
+                if ($ext -eq ".deb") { $newFileName = "Nuke-$ver-$target.deb" }
+                if ($ext -eq ".dmg") { $newFileName = "Nuke-$ver-$target.dmg" }
+                
+                Write-Host "Processing installer: $($_.Name) -> $newFileName"
+                
+                # Sign if Windows
+                if ($os -match "windows" -and (".exe", ".msi" -contains $ext) -and $env:PFX_BASE64) {
+                    $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\" -Filter "signtool.exe" -Recurse | Sort-Object -Property LastWriteTime -Descending | Select-Object -First 1
+                    if ($signtool) {
+                      & $signtool.FullName sign /fd SHA256 /a /f Nuke.pfx /p $env:PFX_PASSWORD $_.FullName
+                    }
+                }
+                
+                Copy-Item $_.FullName "target/final_dist/$newFileName" -Force
+            }
           }
 
       - name: Upload & Release

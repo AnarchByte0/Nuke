@@ -1,8 +1,7 @@
 [package]
 name = "Nuke"
-version = "0.5.16"
+version = "0.5.17"
 edition = "2024"
-
 authors = ["AnarchByte"]
 description = "Nuke"
 repository = "https://github.com/AnarchByte0/Nuke"
@@ -31,7 +30,7 @@ lto = "thin"
 [package.metadata.packager]
 product_name = "Nuke"
 identifier = "ua.AnarchByte.Nuke"
-version = "0.5.16"
+version = "0.5.17"
 publisher = "AnarchByte"
 copyright = "Copyright (c) 2026 AnarchByte"
 description = "Nuke"
