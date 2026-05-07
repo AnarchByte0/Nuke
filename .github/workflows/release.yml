@@ -80,7 +80,7 @@ jobs:
           # Install cargo-packager
           cargo install cargo-packager --locked
 
-      - name: Build & Package (Technical & Official)
+      - name: Build & Package (Installers Only)
         shell: pwsh
         env:
           PFX_BASE64: ${{ secrets.PFX_BASE64 }}
@@ -96,14 +96,32 @@ jobs:
             [IO.File]::WriteAllBytes("Nuke.pfx", [Convert]::FromBase64String($env:PFX_BASE64))
           }
           
-          # 2. Run Technical Build (cargo-dist)
+          # 2. Run Technical Build (cargo-dist) - building binary
           if ($target -eq "i686-unknown-linux-gnu") {
             $env:PKG_CONFIG_PATH = "/usr/lib/i386-linux-gnu/pkgconfig"
           }
-          & dist build --tag=${{ github.ref_name }} --target=$target --output-format=json > dist-manifest.json
+          # Use --allow-dirty=ci to bypass workflow consistency checks
+          & dist build --tag=${{ github.ref_name }} --target=$target --output-format=json --allow-dirty=ci > dist-manifest.json
           
-          # 3. Run Official Build (cargo-packager)
-          # Select formats based on OS
+          # 3. Prepare Binary for Packager
+          # cargo-packager expects the binary in target/release/
+          mkdir target/release -Force
+          $binName = if ($os -match "windows") { "Nuke.exe" } else { "Nuke" }
+          $builtBin = "target/$target/release/$binName"
+          if (Test-Path $builtBin) {
+            Write-Host "Copying $builtBin to target/release/"
+            Copy-Item $builtBin "target/release/$binName" -Force
+          } else {
+            # Fallback for some dist configurations
+            if (Test-Path "target/release/$binName") {
+              Write-Host "Binary already in target/release/"
+            } else {
+              Write-Error "Could not find built binary at $builtBin or target/release/$binName"
+              exit 1
+            }
+          }
+          
+          # 4. Run Official Build (cargo-packager)
           $formats = "nsis,wix"
           if ($os -match "ubuntu") { $formats = "deb" }
           if ($os -match "macos") { $formats = "dmg" }
@@ -111,15 +129,8 @@ jobs:
           Write-Host "Packaging for formats: $formats"
           & cargo packager --release --target $target --formats $formats
           
-          # 4. Prepare Final Artifacts
+          # 5. Prepare Final Artifacts (Installers Only)
           New-Item -Path "target/final_dist" -ItemType Directory -Force
-          
-          # Copy technical binaries from dist
-          if (Test-Path "target/dist") {
-            Get-ChildItem -Path target/dist/ -Recurse | Where-Object { ! $_.PSIsContainer } | ForEach-Object {
-              Copy-Item $_.FullName "target/final_dist/" -Force
-            }
-          }
           
           # Copy and rename official installers from packager (search only bundle folder)
           if (Test-Path "target/release/bundle") {
