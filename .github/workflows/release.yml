@@ -68,10 +68,10 @@ jobs:
               libjavascriptcoregtk-4.1-dev
           fi
 
-      - name: Install dist
-        run: |
-          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.43.0/cargo-dist-installer.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Install cargo-dist
+        uses: axodotdev/setup-cargo-dist@v1
+        with:
+          version: v0.43.0
 
       - name: Build & Package
         shell: bash
